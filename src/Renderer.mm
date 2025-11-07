@@ -1,16 +1,20 @@
 #import "Renderer.h"
+#include "engine/EngineCore.h"
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 
-@implementation Renderer {
+@implementation Renderer
+{
     id<MTLDevice> _device;
     id<MTLCommandQueue> _queue;
+    EngineCore _engine;
 }
 
-- (instancetype)initWithMTKView:(MTKView *)view
+- (instancetype)initWithMTKView:(MTKView*)view
 {
     self = [super init];
-    if (!self) return nil;
+    if (!self)
+        return nil;
 
     _device = view.device ?: MTLCreateSystemDefaultDevice();
     view.device = _device;
@@ -24,20 +28,25 @@
     return self;
 }
 
-- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size
+- (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size
 {
     // Handle resize later if needed
 }
 
-- (void)drawInMTKView:(MTKView *)view
+- (void)drawInMTKView:(MTKView*)view
 {
-    MTLRenderPassDescriptor *rp = view.currentRenderPassDescriptor;
+    const static double dt = 1.0 / 30.0;
+    static double t = 0.0;
+
+    t += dt;
+    _engine.update(dt);
+
+    MTLRenderPassDescriptor* rp = view.currentRenderPassDescriptor;
     id<CAMetalDrawable> drawable = view.currentDrawable;
-    if (!rp || !drawable) return;
+    if (!rp || !drawable)
+        return;
 
     // Simple animated clear color to prove the loop is running
-    static float t = 0.0f;
-    t += 0.01f;
     double r = 0.5 + 0.5 * sin(t * 0.9);
     double g = 0.5 + 0.5 * sin(t * 1.3 + 2.0);
     double b = 0.5 + 0.5 * sin(t * 1.7 + 4.0);
