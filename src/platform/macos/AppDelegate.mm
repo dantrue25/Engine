@@ -1,6 +1,6 @@
 #import "AppDelegate.h"
 #import <MetalKit/MetalKit.h>
-#import "Renderer.h"
+#import "renderer/metal/Renderer.h"
 
 @implementation AppDelegate
 {

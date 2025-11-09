@@ -5,9 +5,11 @@ project(MetalEngine LANGUAGES C CXX OBJC OBJCXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_executable(MetalEngine MACOSX_BUNDLE
-    src/main.mm
-    src/AppDelegate.mm
-    src/Renderer.mm
+    src/platform/macos/main.mm
+    src/platform/macos/AppDelegate.mm
+    src/renderer/metal/Renderer.mm
+    src/renderer/directx/DirectXRendererStub.cpp
+    src/renderer/vulkan/VulkanRendererStub.cpp
     src/engine/EngineCore.cpp
 )
 
@@ -22,3 +24,5 @@ target_link_libraries(MetalEngine
     "-framework MetalKit"
     "-framework QuartzCore"
 )
+
+target_include_directories(MetalEngine PRIVATE src)
