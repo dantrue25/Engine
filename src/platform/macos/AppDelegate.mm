@@ -23,6 +23,8 @@
 
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();
     _mtkView = [[MTKView alloc] initWithFrame:frame device:device];
+    _mtkView.enableSetNeedsDisplay = NO;
+    _mtkView.paused = YES;
 
     _renderer = [[Renderer alloc] initWithMTKView:_mtkView];
     _mtkView.delegate = _renderer;

@@ -10,7 +10,9 @@ void EngineCore::setRenderer(IRendererBackend* renderer)
 void EngineCore::update(double dt)
 {
     if (!_renderer)
+    {
         return;
+    }
 
     RendererFrameInfo frameInfo{};
     frameInfo.deltaTimeSeconds = dt;

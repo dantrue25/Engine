@@ -22,7 +22,13 @@ target_link_libraries(MetalEngine
     "-framework Cocoa"
     "-framework Metal"
     "-framework MetalKit"
+    "-framework CoreVideo"
     "-framework QuartzCore"
 )
 
 target_include_directories(MetalEngine PRIVATE src)
+
+target_compile_options(MetalEngine PRIVATE
+    "$<$<COMPILE_LANGUAGE:OBJC>:-fobjc-arc>"
+    "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>"
+)

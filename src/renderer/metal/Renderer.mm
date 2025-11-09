@@ -1,6 +1,7 @@
 #import "renderer/metal/Renderer.h"
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
+#import <CoreVideo/CoreVideo.h>
 
 #include <cmath>
 #include <memory>
@@ -15,9 +16,11 @@ class MetalRendererBackend final : public IRendererBackend
 public:
     void initialize(const RendererInitInfo& info) override
     {
-        _view = static_cast<MTKView*>(info.nativeView);
+        _view = (__bridge MTKView*)(info.nativeView);
         if (!_view)
+        {
             return;
+        }
 
         _device = _view.device ?: MTLCreateSystemDefaultDevice();
         _view.device = _device;
@@ -38,14 +41,18 @@ public:
     void renderFrame(const RendererFrameInfo& info) override
     {
         if (!_view)
+        {
             return;
+        }
 
         _timeSeconds += info.deltaTimeSeconds;
 
         MTLRenderPassDescriptor* rp = _view.currentRenderPassDescriptor;
         id<CAMetalDrawable> drawable = _view.currentDrawable;
         if (!rp || !drawable)
+        {
             return;
+        }
 
         double r = 0.5 + 0.5 * sin(_timeSeconds * 0.9);
         double g = 0.5 + 0.5 * sin(_timeSeconds * 1.3 + 2.0);
@@ -71,36 +78,75 @@ private:
 };
 } // namespace
 
+static CVReturn DisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp* now,
+                                    const CVTimeStamp* outputTime, CVOptionFlags, CVOptionFlags*,
+                                    void* displayLinkContext);
+
 @implementation Renderer
 {
     std::unique_ptr<IRendererBackend> _backend;
     EngineCore _engine;
-    double _fixedDeltaSeconds;
+    __weak MTKView* _view;
+    CVDisplayLinkRef _displayLink;
+    double _pendingDeltaSeconds;
+    double _fallbackDeltaSeconds;
+    double _lastDisplayLinkTime;
 }
 
 - (instancetype)initWithMTKView:(MTKView*)view
 {
     self = [super init];
     if (!self)
+    {
         return nil;
+    }
+
+    _view = view;
+    _fallbackDeltaSeconds = 1.0 / 60.0;
+    _pendingDeltaSeconds = _fallbackDeltaSeconds;
+    _lastDisplayLinkTime = 0.0;
+    _displayLink = nullptr;
 
     _backend = std::make_unique<MetalRendererBackend>();
 
     RendererInitInfo initInfo{};
-    initInfo.nativeView = view;
+    initInfo.nativeView = (__bridge void*)view;
     _backend->initialize(initInfo);
 
-    _fixedDeltaSeconds = 1.0 / 30.0;
     _engine.setRenderer(_backend.get());
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    if (CVDisplayLinkCreateWithActiveCGDisplays(&_displayLink) == kCVReturnSuccess)
+    {
+        CVDisplayLinkSetOutputCallback(_displayLink, &DisplayLinkCallback, (__bridge void*)self);
+        CVDisplayLinkStart(_displayLink);
+    }
+#pragma clang diagnostic pop
+
     return self;
+}
+
+- (void)dealloc
+{
+    if (_displayLink)
+    {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+        CVDisplayLinkStop(_displayLink);
+        CVDisplayLinkRelease(_displayLink);
+#pragma clang diagnostic pop
+        _displayLink = nullptr;
+    }
 }
 
 - (void)mtkView:(MTKView*)view drawableSizeWillChange:(CGSize)size
 {
     (void)view;
     if (!_backend)
+    {
         return;
+    }
 
     _backend->resize(static_cast<int>(size.width), static_cast<int>(size.height));
 }
@@ -109,9 +155,55 @@ private:
 {
     (void)view;
     if (!_backend)
+    {
         return;
+    }
 
-    _engine.update(_fixedDeltaSeconds);
+    double deltaSeconds =
+        (_pendingDeltaSeconds > 0.0) ? _pendingDeltaSeconds : _fallbackDeltaSeconds;
+    _pendingDeltaSeconds = 0.0;
+    _engine.update(deltaSeconds);
+}
+
+- (void)requestDrawWithDelta:(double)deltaSeconds
+{
+    if (!_view)
+    {
+        return;
+    }
+
+    _pendingDeltaSeconds = deltaSeconds;
+    [_view draw];
+}
+
+- (void)handleDisplayLinkTick:(const CVTimeStamp*)timestamp
+{
+    double currentSeconds = 0.0;
+    if (timestamp->videoTimeScale != 0)
+    {
+        currentSeconds = static_cast<double>(timestamp->videoTime) /
+                         static_cast<double>(timestamp->videoTimeScale);
+    }
+
+    double deltaSeconds = _fallbackDeltaSeconds;
+    if (_lastDisplayLinkTime > 0.0 && currentSeconds > 0.0)
+    {
+        deltaSeconds = currentSeconds - _lastDisplayLinkTime;
+    }
+    _lastDisplayLinkTime = currentSeconds;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self requestDrawWithDelta:deltaSeconds];
+    });
 }
 
 @end
+
+static CVReturn DisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp* now,
+                                    const CVTimeStamp* outputTime, CVOptionFlags, CVOptionFlags*,
+                                    void* displayLinkContext)
+{
+    Renderer* renderer = (__bridge Renderer*)displayLinkContext;
+    [renderer handleDisplayLinkTick:outputTime ? outputTime : now];
+    return kCVReturnSuccess;
+}
