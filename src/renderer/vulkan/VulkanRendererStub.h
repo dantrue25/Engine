@@ -2,6 +2,8 @@
 
 #include "renderer/IRendererBackend.h"
 
+// Placeholder backend so Vulkan-specific plumbing can compile before real implementation exists.
+
 class VulkanRendererStub final : public IRendererBackend
 {
 public:

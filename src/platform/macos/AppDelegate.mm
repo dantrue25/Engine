@@ -2,6 +2,8 @@
 #import <MetalKit/MetalKit.h>
 #import "renderer/metal/Renderer.h"
 
+// Handles macOS application lifecycle: builds the window/MTKView pairing
+// and wires the renderer delegate before showing the UI.
 @implementation AppDelegate
 {
     NSWindow* _window;

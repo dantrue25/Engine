@@ -1,5 +1,17 @@
 # Project Status & Next Steps
 
+## 2025-11-09 Snapshot
+
+### Highlights
+- Added `AGENTS.md` so multiple Codex agents share the same repo playbook and coordination rules.
+- Annotated the macOS bootstrap, engine loop, and renderer interface with inline comments to speed up future backend selection work.
+- Confirmed backend selection remains the top engineering priority; no code changes yet, but docs now outline expectations.
+
+### Immediate Next Steps
+1. Sketch a backend registry/helper that exposes only platform-valid renderer options.
+2. Thread that helper through the macOS bootstrap so AppDelegate/Renderer instantiate the selected backend instead of hard-coding Metal.
+3. Document any architectural decisions that emerge during the plumbing in `STATUS.md` to keep future agents aligned.
+
 ## 2024-11-08 Snapshot
 
 ### Current Focus

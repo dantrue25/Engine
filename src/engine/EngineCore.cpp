@@ -14,6 +14,7 @@ void EngineCore::update(double dt)
         return;
     }
 
+    // Package the timestep and let the current renderer backend produce the next frame.
     RendererFrameInfo frameInfo{};
     frameInfo.deltaTimeSeconds = dt;
     _renderer->renderFrame(frameInfo);

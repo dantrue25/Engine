@@ -9,6 +9,7 @@
 #include "renderer/IRendererBackend.h"
 #include "engine/EngineCore.h"
 
+// Metal-specific backend that owns the GPU objects and executes draw calls.
 namespace
 {
 class MetalRendererBackend final : public IRendererBackend
@@ -78,10 +79,13 @@ private:
 };
 } // namespace
 
+// Forward declaration for the CoreVideo callback that proxies ticks back to Renderer.
 static CVReturn DisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp* now,
                                     const CVTimeStamp* outputTime, CVOptionFlags, CVOptionFlags*,
                                     void* displayLinkContext);
 
+// Objective-C++ wrapper that owns the engine, listens to display-link ticks, and
+// forwards delta times into the renderer backend.
 @implementation Renderer
 {
     std::unique_ptr<IRendererBackend> _backend;

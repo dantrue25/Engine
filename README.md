@@ -76,6 +76,7 @@ In short: macOS/AppKit owns the event loop, the Objective‑C layer owns platfor
 	- `platform/macos/` — macOS specific platform glue and app bundle helpers.
 	- `engine/` — core engine code (Engine initialization, main loop, etc.).
 - `build/` — CMake-generated build directory (not committed). When configured with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` this contains `compile_commands.json` used by language servers for accurate IntelliSense.
+- `AGENTS.md` — collaboration notes so multiple assistants/developers stay in sync on workflow expectations.
 
 ## Build (macOS)
 

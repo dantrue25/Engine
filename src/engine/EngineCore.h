@@ -2,6 +2,7 @@
 
 class IRendererBackend;
 
+// Platform-agnostic core loop that steps simulation and drives the renderer backend.
 class EngineCore
 {
 public:
