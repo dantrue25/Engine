@@ -18,3 +18,13 @@ void DirectXRendererStub::renderFrame(const RendererFrameInfo& info)
 {
     (void)info;
 }
+
+double DirectXRendererStub::getSmoothedGpuFrameTimeMs() const
+{
+    return 0.0;
+}
+
+void DirectXRendererStub::setResolutionScale(double scale)
+{
+    (void)scale;
+}

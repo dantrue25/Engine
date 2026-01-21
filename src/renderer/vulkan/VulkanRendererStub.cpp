@@ -18,3 +18,13 @@ void VulkanRendererStub::renderFrame(const RendererFrameInfo& info)
 {
     (void)info;
 }
+
+double VulkanRendererStub::getSmoothedGpuFrameTimeMs() const
+{
+    return 0.0;
+}
+
+void VulkanRendererStub::setResolutionScale(double scale)
+{
+    (void)scale;
+}

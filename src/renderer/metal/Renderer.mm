@@ -3,6 +3,8 @@
 #import <MetalKit/MetalKit.h>
 #import <CoreVideo/CoreVideo.h>
 
+#include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <memory>
 
@@ -64,6 +66,21 @@ public:
         rp.colorAttachments[0].storeAction = MTLStoreActionStore;
 
         id<MTLCommandBuffer> cb = [_queue commandBuffer];
+        [cb addCompletedHandler:^(id<MTLCommandBuffer> buffer) {
+            double start = buffer.GPUStartTime;
+            double end = buffer.GPUEndTime;
+            if (start <= 0.0 || end <= start)
+            {
+                return;
+            }
+
+            double frameMs = (end - start) * 1000.0;
+            double previous = _smoothedGpuFrameTimeMs.load(std::memory_order_relaxed);
+            double smoothed =
+                (previous <= 0.0) ? frameMs : (previous + _gpuFrameSmoothing * (frameMs - previous));
+            _smoothedGpuFrameTimeMs.store(smoothed, std::memory_order_relaxed);
+            _lastGpuFrameTimeMs.store(frameMs, std::memory_order_relaxed);
+        }];
         id<MTLRenderCommandEncoder> enc = [cb renderCommandEncoderWithDescriptor:rp];
 
         [enc endEncoding];
@@ -71,11 +88,36 @@ public:
         [cb commit];
     }
 
+    double getSmoothedGpuFrameTimeMs() const override
+    {
+        return _smoothedGpuFrameTimeMs.load(std::memory_order_relaxed);
+    }
+
+    void setResolutionScale(double scale) override
+    {
+        if (!_view)
+        {
+            return;
+        }
+
+        double clamped = std::min(2.0, std::max(scale, 0.5));
+        _resolutionScale = clamped;
+
+        CGSize viewSize = _view.bounds.size;
+        CGFloat drawableWidth = static_cast<CGFloat>(viewSize.width * _resolutionScale);
+        CGFloat drawableHeight = static_cast<CGFloat>(viewSize.height * _resolutionScale);
+        _view.drawableSize = CGSizeMake(drawableWidth, drawableHeight);
+    }
+
 private:
     MTKView* _view = nil;
     id<MTLDevice> _device = nil;
     id<MTLCommandQueue> _queue = nil;
     double _timeSeconds = 0.0;
+    std::atomic<double> _lastGpuFrameTimeMs{0.0};
+    std::atomic<double> _smoothedGpuFrameTimeMs{0.0};
+    const double _gpuFrameSmoothing = 0.1;
+    double _resolutionScale = 1.0;
 };
 } // namespace
 
