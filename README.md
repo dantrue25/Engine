@@ -79,8 +79,8 @@ In short: macOS/AppKit owns the event loop, the Objective‑C layer owns platfor
 
 ## Build (macOS)
 
-Prerequisites:
-- Xcode (Command Line Tools)
+Prerequisites (macOS Metal app bundle):
+- Xcode (Command Line Tools) — required for the macOS Metal backend (app bundle, windowing, Metal compilation).
 - CMake (>= 3.22)
 
 From the repository root:
@@ -97,6 +97,10 @@ To run the app:
 ```bash
 open build/MetalEngine.app
 ```
+
+## Core engine / renderer requirements
+
+The engine core and renderer abstraction are CMake + C++ and are intended to be buildable with a standard C++ toolchain on non-macOS platforms. They do not inherently require Xcode; Xcode is only needed for the macOS platform bootstrap and Metal backend.
 
 ## Development / Editor tips
 
