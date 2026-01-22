@@ -23,7 +23,7 @@ The project is split into three cooperating layers:
    - It depends only on abstract interfaces (renderer, input, etc.) so it can be reused across platforms or graphics APIs without changes.
 
 3. Renderer abstraction
-   - A thin C++ interface (`IRendererBackend`, to be introduced) defines the operations the engine expects (initialize, resize, render frame).
+   - A thin C++ interface (`IRendererBackend`) defines the operations the engine expects (initialize, resize, render frame).
    - Each graphics API implements that interface in its own module (e.g., Metal, DirectX 12, Vulkan). API-specific code stays isolated, but the engine calls them uniformly.
 
 Data flow per frame:
@@ -46,12 +46,12 @@ This separation lets you ship one engine loop while swapping renderers per platf
    - The `Renderer` Objective‑C++ class is a thin wrapper. In its initializer it:
      1. Creates a `MetalRendererBackend` (a C++ class that implements `IRendererBackend`).
      2. Passes the `MTKView` pointer down through `RendererInitInfo`, so the backend can configure Metal objects.
-     3. Creates an `EngineCore`, calls `setRenderer` with the backend instance, and stores a fixed timestep (currently 1/30 s).
+     3. Creates an `EngineCore`, calls `setRenderer` with the backend instance, and prepares to forward display-link deltas.
    - At this point, the C++ world and the Objective‑C world are linked through the backend interface.
 
 4. **Per-frame flow**
-   - AppKit ticks at the MTKView’s preferred frame rate (60 FPS). For each frame:
-     - `Renderer::drawInMTKView` runs. It simply forwards the fixed delta time to `EngineCore::update`.
+   - CoreVideo’s display link ticks at the display refresh rate. For each tick:
+     - `Renderer::drawInMTKView` runs. It forwards the measured delta time to `EngineCore::update`.
      - `EngineCore` builds a `RendererFrameInfo` with that delta and calls `_renderer->renderFrame(frameInfo)`.
      - The active backend is still Metal, so control lands in `MetalRendererBackend::renderFrame`.
 
@@ -59,6 +59,7 @@ This separation lets you ship one engine loop while swapping renderers per platf
    - The backend owns the Metal device, command queue, and keeps a monotonically increasing time accumulator.
    - During `renderFrame` it asks the MTKView for a render pass descriptor and drawable. If either is missing, it skips the frame gracefully.
    - Otherwise it computes an animated RGB clear color with sine waves (proving the GPU is being driven), writes that into the color attachment, encodes an empty pass, presents the drawable, and commits the command buffer.
+   - It also records GPU frame timing (smoothed) and supports a resolution scale hook for future dynamic quality control.
    - Resize callbacks (`mtkView:drawableSizeWillChange:`) forward dimension changes into `IRendererBackend::resize`, which currently ignores them but establishes the hook for real handling later.
 
 6. **Extensibility hooks**
@@ -73,7 +74,8 @@ In short: macOS/AppKit owns the event loop, the Objective‑C layer owns platfor
 - `src/` — main source tree:
 	- `main.mm`, `AppDelegate.mm` / `.h` — macOS entry point and application lifecycle code (Objective‑C++ / Objective‑C).
 	- `renderer/` — renderer interface and backends (the `IRendererBackend` interface and platform-specific renderer implementations).
-	- `platform/macos/` — macOS specific platform glue and app bundle helpers.
+	- `platform/PlatformPresentation.h` — presentation intent abstraction (windowed/borderless/exclusive).
+	- `platform/macos/` — macOS specific platform glue and app bundle helpers (includes a presentation adapter).
 	- `engine/` — core engine code (Engine initialization, main loop, etc.).
 - `build/` — CMake-generated build directory (not committed). When configured with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` this contains `compile_commands.json` used by language servers for accurate IntelliSense.
 - `AGENTS.md` — collaboration notes so multiple assistants/developers stay in sync on workflow expectations.

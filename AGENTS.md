@@ -1,6 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
+- `src/platform/PlatformPresentation.h` — Presentation intent abstraction (windowed/borderless/exclusive).
 - `src/platform/macos/` — App bootstrap (`main.mm`, `AppDelegate.mm`) and platform glue.
 - `src/renderer/metal/` — Objective‑C++ host plus Metal backend implementation.
 - `src/renderer/{directx,vulkan}/` — Stub backends that compile but currently log “not implemented”.
