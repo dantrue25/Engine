@@ -1,4 +1,5 @@
 #import "renderer/metal/Renderer.h"
+#import <AppKit/AppKit.h>
 #import <Metal/Metal.h>
 #import <MetalKit/MetalKit.h>
 #import <CoreVideo/CoreVideo.h>
@@ -133,6 +134,7 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp* now,
     std::unique_ptr<IRendererBackend> _backend;
     EngineCore _engine;
     __weak MTKView* _view;
+    __weak NSTextField* _overlayTextField;
     CVDisplayLinkRef _displayLink;
     double _pendingDeltaSeconds;
     double _fallbackDeltaSeconds;
@@ -209,6 +211,36 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp* now,
         (_pendingDeltaSeconds > 0.0) ? _pendingDeltaSeconds : _fallbackDeltaSeconds;
     _pendingDeltaSeconds = 0.0;
     _engine.update(deltaSeconds);
+
+    if (_overlayTextField)
+    {
+        double fps = (deltaSeconds > 0.0) ? (1.0 / deltaSeconds) : 0.0;
+        double gpuMs = _backend->getSmoothedGpuFrameTimeMs();
+        CGSize drawableSize = _view ? _view.drawableSize : CGSizeZero;
+        CGSize viewSize = _view ? _view.bounds.size : CGSizeZero;
+        NSScreen* screen = _view.window.screen;
+        CGFloat backingScale = screen ? screen.backingScaleFactor : 1.0;
+        CGSize screenPoints = screen ? screen.frame.size : CGSizeZero;
+        CGSize screenPixels =
+            CGSizeMake(screenPoints.width * backingScale, screenPoints.height * backingScale);
+
+        NSString* text =
+            [NSString stringWithFormat:@"fps: %.1f\nGPU: %.2f ms\n"
+                                       "drawable: %.0fx%.0f\nview pts: %.0fx%.0f\n"
+                                       "screen pts: %.0fx%.0f\nscale: %.2f (%.0fx%.0f px)",
+                                       fps,
+                                       gpuMs,
+                                       drawableSize.width,
+                                       drawableSize.height,
+                                       viewSize.width,
+                                       viewSize.height,
+                                       screenPoints.width,
+                                       screenPoints.height,
+                                       backingScale,
+                                       screenPixels.width,
+                                       screenPixels.height];
+        _overlayTextField.stringValue = text;
+    }
 }
 
 - (void)requestDrawWithDelta:(double)deltaSeconds
@@ -241,6 +273,11 @@ static CVReturn DisplayLinkCallback(CVDisplayLinkRef, const CVTimeStamp* now,
     dispatch_async(dispatch_get_main_queue(), ^{
         [self requestDrawWithDelta:deltaSeconds];
     });
+}
+
+- (void)setOverlayTextField:(NSTextField*)textField
+{
+    _overlayTextField = textField;
 }
 
 @end

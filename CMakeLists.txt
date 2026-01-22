@@ -7,6 +7,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_executable(MetalEngine MACOSX_BUNDLE
     src/platform/macos/main.mm
     src/platform/macos/AppDelegate.mm
+    src/platform/macos/MacOSPresentation.mm
     src/renderer/metal/Renderer.mm
     src/renderer/directx/DirectXRendererStub.cpp
     src/renderer/vulkan/VulkanRendererStub.cpp
