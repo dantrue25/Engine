@@ -1,6 +1,6 @@
 # Project Status & Next Steps
 
-## 2026-01-21
+## Status: 2026-01-21
 
 ### Session Notes
 - **Renderer telemetry**: added GPU frame-time tracking plus resolution-scale hooks for future dynamic quality control.
