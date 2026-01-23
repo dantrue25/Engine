@@ -38,3 +38,34 @@
 - Backend selection plumbing is the next coding task. user wants guidance before any edits; start by proposing a backend registry/helper scoped per platform.
 - Metal is still the only functional backend; DirectX/Vulkan remain stubs. goal is to create hooks without exposing invalid options on macOS.
 - No outstanding code changes; working tree clean after commit `069c64f`. When resuming, confirm with the user before touching files.
+
+## Latency-First Engine Rules (Mandatory)
+These rules are mandatory for any change in this repository. If a proposed change would increase input-to-photon latency, it must not be implemented.
+
+### Core Constraints
+- Default to **1 frame in flight**; never add extra buffering to smooth timing.
+- Prefer **stalls over queued frames**.
+- **Sample input as late as possible** (immediately before simulation).
+- **Submit rendering as late as possible** (no render-then-sleep).
+- **Separate simulation, render, and presentation clocks**.
+- **Simulation correctness is guaranteed**; presentation timing is best-effort.
+- **macOS is composited** (CAMetalLayer → compositor); treat rendering as offscreen presentation.
+- **VRR is preferred but never assumed**.
+- **Never rely on exclusive fullscreen semantics**.
+- **Never perform synchronous shader/pipeline compilation during gameplay**.
+- **Expose telemetry** for timing variability instead of hiding it.
+
+### DO
+- Minimize latency over smoothness.
+- Prefer explicit telemetry over buffering.
+- Treat VRR as an optimization, not a requirement.
+- Keep presentation as intent versus actual behavior (especially on macOS).
+
+### DO NOT
+- Add frame buffering to hide timing issues.
+- Assume control over display scanout.
+- Add blocking compilation paths to gameplay.
+- Introduce render-then-sleep scheduling.
+
+### Enforcement
+If a change conflicts with any rule above, stop and revise the plan. Do not merge or commit changes that increase latency.

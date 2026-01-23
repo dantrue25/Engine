@@ -12,6 +12,19 @@
 - **Dynamic resolution policy**: implement the conservative EngineCore controller (headroom + hysteresis).
 - **Overlay handoff**: replace the macOS overlay with an in-engine HUD.
 
+## 2026-01-22
+
+### Session Notes
+- **Frame pacing direction**: latency-first scheduling is the priority; smoothness must never be achieved by adding latency.
+- **Frames in flight**: 1 frame in flight is the design default; prefer stalls over queued frames.
+- **Late input + late submit**: sample input immediately before simulation; submit rendering as late as possible.
+- **Presentation intent vs reality**: presentation timing is best-effort, especially on macOS where compositing is unavoidable.
+- **Telemetry plan**: track frame pacing, present behavior, and missed presentation targets.
+
+### Next Session
+- **Plumbing**: define where frame pacing and presentation telemetry live (EngineCore vs backend helpers).
+- **Instrumentation**: add counters/timestamps for input sampling, simulation step, render submit, and present callbacks.
+
 ## 2026-01-20
 
 ### Session Notes
