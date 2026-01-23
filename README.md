@@ -1,149 +1,197 @@
-# Engine
+# 🚀 Engine
 
-MetalEngine is a small macOS native rendering engine project that demonstrates a minimal application bundle using Metal, MetalKit and Cocoa. The codebase is intended as a lightweight starting point for exploring renderer design, platform integration (macOS), and an Objective‑C++ codepath for app bootstrapping.
+*A latency-first, adaptive real-time rendering engine focused on feel, predictability, and long-term scalability.*
 
-This README documents the project purpose, repository layout, how to build and run locally, and a few developer tips (IntelliSense / editor configuration and recommended extensions).
+---
 
-## Purpose
+## 🎯 Overview
 
-- Provide a compact example of a macOS Metal application structured as a CMake project.
-- Show how to integrate Objective‑C / Objective‑C++ (`.m` / `.mm`) sources into a cross-platform C++ project using CMake.
-- Offer a simple renderer backend abstraction so different renderer implementations (e.g. Metal) can be swapped or extended.
+**Engine** is an experimental real-time rendering engine built around a simple but demanding goal:
 
-## Latency-first rendering philosophy
+> **Make interactive systems feel good — immediately — on any machine.**
 
-This project prioritizes lowest-possible input-to-photon latency over smoothness. The intended feel is “NES on a CRT”: immediate response with no artificial buffering or smoothing. Current and planned behaviors follow these rules:
+The engine prioritizes **input-to-photon latency**, explicit control over timing, and the ability to **adapt to the hardware it is running on**, rather than assuming a fixed resolution, frame rate, or performance tier.
 
-- **Minimal buffering:** default to one frame in flight; never add extra buffering to smooth timing.
-- **Late input + late submit:** sample input immediately before simulation; submit rendering as late as possible (no render-then-sleep).
-- **Separate clocks:** simulation, render, and presentation timing are tracked independently; simulation correctness is guaranteed while presentation timing is best-effort.
-- **macOS composited reality:** macOS presentation is composited (CAMetalLayer → compositor), so treat presentation as offscreen.
-- **VRR preferred, not required:** VRR is an optimization, never an assumption; do not rely on exclusive fullscreen semantics.
-- **No blocking compilation during gameplay:** shader/pipeline compilation must not block runtime; use precompile or async paths.
-- **Expose telemetry:** report variability and misses instead of hiding them behind buffering.
+Rather than targeting a specific class of machine, Engine is designed to **discover available headroom at runtime** and scale its workload accordingly — preserving responsiveness on constrained systems and automatically improving visual fidelity and frame rate on more capable ones.
 
-## Architecture
+---
 
-The project is split into three cooperating layers:
+## ⚡ Core Philosophy
 
-1. Platform bootstrap
-   - macOS-specific Objective‑C++ entry points (`main.mm`, `AppDelegate.mm`) own the app lifecycle, window management, and native view objects (e.g., `MTKView`).
-   - This layer is the only place that should talk to Cocoa/AppKit directly. Other platforms (Windows, Linux, iOS) would provide analogous bootstrap code under `src/platform/<platform>`.
+### ⚡ Latency Is Paramount
 
-2. Engine core
-   - C++ code (`src/engine`) holds app-wide state, main-loop timing, and high-level orchestration.
-   - It depends only on abstract interfaces (renderer, input, etc.) so it can be reused across platforms or graphics APIs without changes.
+Responsiveness comes first.
 
-3. Renderer abstraction
-   - A thin C++ interface (`IRendererBackend`) defines the operations the engine expects (initialize, resize, render frame).
-   - Each graphics API implements that interface in its own module (e.g., Metal, DirectX 12, Vulkan). API-specific code stays isolated, but the engine calls them uniformly.
+- Input-to-photon latency is prioritized over visual smoothness.
+- Buffering to hide timing issues is avoided.
+- When under load, the engine prefers **reducing work** over **adding latency**.
 
-Data flow per frame:
-platform bootstrap → engine tick (dt) → renderer backend → GPU commands. Resize or platform events bubble from bootstrap to engine, which forwards to the renderer.
+Default stance:
+- minimal frames in flight
+- late input sampling
+- late rendering submission
 
-This separation lets you ship one engine loop while swapping renderers per platform/configuration. Metal is the initial backend; DirectX/Vulkan backends will live alongside it once added.
+Stalls are acceptable. Queued frames are not.
 
-## How the Code Runs (Story Mode)
+---
 
-1. **Bootstrap (Objective‑C++ entry)**
-   - macOS launches `MetalEngine.app`, which calls `main` in `src/platform/macos/main.mm`.
-   - `main` creates the `NSApplication`, instantiates `AppDelegate`, and hands control to AppKit via `NSApplicationMain`. From here AppKit drives the event loop.
+### 📈 Adaptive Performance & Graceful Scaling
 
-2. **Window + view setup**
-   - When the app finishes launching, `AppDelegate::applicationDidFinishLaunching` runs (`src/platform/macos/AppDelegate.mm`).
-   - It creates an `NSWindow`, then builds an `MTKView` backed by the default `MTLDevice`.
-   - The view’s delegate is set to an Objective‑C++ `Renderer` object (also defined under `src/renderer/metal`). AppKit will now call the delegate whenever the drawable size changes or a new frame should be rendered.
+Engine is built with the assumption that **hardware evolves faster than software**.
 
-3. **Renderer host + engine handshake**
-   - The `Renderer` Objective‑C++ class is a thin wrapper. In its initializer it:
-     1. Creates a `MetalRendererBackend` (a C++ class that implements `IRendererBackend`).
-     2. Passes the `MTKView` pointer down through `RendererInitInfo`, so the backend can configure Metal objects.
-     3. Creates an `EngineCore`, calls `setRenderer` with the backend instance, and prepares to forward display-link deltas.
-   - At this point, the C++ world and the Objective‑C world are linked through the backend interface.
+Instead of locking content to the performance characteristics of the machine it was authored on, the engine is designed to **adapt continuously to the headroom available on the system**.
 
-4. **Per-frame flow**
-   - CoreVideo’s display link ticks at the display refresh rate. For each tick:
-     - `Renderer::drawInMTKView` runs. It forwards the measured delta time to `EngineCore::update`.
-     - `EngineCore` builds a `RendererFrameInfo` with that delta and calls `_renderer->renderFrame(frameInfo)`.
-     - The active backend is still Metal, so control lands in `MetalRendererBackend::renderFrame`.
+This means:
 
-5. **Metal backend internals**
-   - The backend owns the Metal device, command queue, and keeps a monotonically increasing time accumulator.
-   - During `renderFrame` it asks the MTKView for a render pass descriptor and drawable. If either is missing, it skips the frame gracefully.
-   - Otherwise it computes an animated RGB clear color with sine waves (proving the GPU is being driven), writes that into the color attachment, encodes an empty pass, presents the drawable, and commits the command buffer.
-   - It also records GPU frame timing (smoothed) and supports a resolution scale hook for future dynamic quality control.
-   - Resize callbacks (`mtkView:drawableSizeWillChange:`) forward dimension changes into `IRendererBackend::resize`, which currently ignores them but establishes the hook for real handling later.
+- **Variable frame rate**  
+  Rendering and presentation are not bound to a fixed cadence.
 
-6. **Extensibility hooks**
-   - The DirectX and Vulkan directories contain stub implementations of `IRendererBackend`. They compile and link today, but only log that they’re unimplemented. Swapping to them will eventually happen via platform/build selection logic.
-   - Because the engine speaks only through `IRendererBackend`, you can lift `src/engine` and the relevant renderer backend to other platforms without touching the app bootstrap.
+- **Variable resolution**  
+  Render resolution is treated as a dynamic control variable, not a constant.
 
-In short: macOS/AppKit owns the event loop, the Objective‑C layer owns platform UI, the C++ engine owns the simulation tick, and renderer backends translate that tick into GPU work. The code is structured so you can trace the call stack in order: `main` → `AppDelegate` → `Renderer (Obj‑C++)` → `EngineCore (C++)` → `MetalRendererBackend (C++/Metal)`.
+- **Headroom-driven scaling**  
+  CPU and GPU timing are observed at runtime and used to adjust workload.
 
-## High-level structure
+- **Longevity by design**  
+  A game authored today should naturally render at higher resolution and frame rate on future hardware, without code or content changes.
 
-- `CMakeLists.txt` — top-level CMake configuration that creates the `MetalEngine` MacOSX bundle and links the required Apple frameworks.
-- `src/` — main source tree:
-	- `main.mm`, `AppDelegate.mm` / `.h` — macOS entry point and application lifecycle code (Objective‑C++ / Objective‑C).
-	- `renderer/` — renderer interface and backends (the `IRendererBackend` interface and platform-specific renderer implementations).
-	- `platform/PlatformPresentation.h` — presentation intent abstraction (windowed/borderless/exclusive).
-	- `platform/macos/` — macOS specific platform glue and app bundle helpers (includes a presentation adapter).
-	- `engine/` — core engine code (Engine initialization, main loop, etc.).
-- `build/` — CMake-generated build directory (not committed). When configured with `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` this contains `compile_commands.json` used by language servers for accurate IntelliSense.
-- `AGENTS.md` — collaboration notes so multiple assistants/developers stay in sync on workflow expectations.
+When performance pressure arises, the engine reduces workload rather than buffering frames — preserving responsiveness even as visual fidelity adapts.
 
-## Build (macOS)
+This adaptive behavior is **not a feature**; it is fundamental to the engine’s identity and inseparable from its latency-first design.
 
-Prerequisites (macOS Metal app bundle):
-- Xcode (Command Line Tools) — required only for the macOS Metal target (app bundle, windowing, Metal compilation).
-- CMake (>= 3.22)
+---
 
-From the repository root:
+### ⏱️ Three Independent Clocks
 
-```bash
-cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-cmake --build build --config Debug
-```
+The engine explicitly separates:
 
-This will produce a macOS bundle under `build/MetalEngine.app` when the build succeeds.
+1. **Simulation time**  
+   Deterministic, controlled, and decoupled from presentation.
 
-To run the app:
+2. **Render time**  
+   Variable, driven by workload and available resources.
 
-```bash
-open build/MetalEngine.app
-```
+3. **Presentation time**  
+   Controlled by the platform and display environment.
 
-## Core engine / renderer requirements
+Predictability comes from **separation**, not forced alignment.
 
-The engine core and renderer abstraction are CMake + C++ and are intended to be buildable with a standard C++ toolchain on non-macOS platforms. They do not inherently require Xcode; Xcode is only needed for the macOS platform bootstrap and Metal backend.
+---
 
-## Development / Editor tips
+### 🧪 Observable, Not Magical
 
-- Recommended VS Code extensions:
-	- CMake Tools (`ms-vscode.cmake-tools`) — configure/build from within VS Code.
-	- clangd (clangd extension) — better Objective‑C/Objective‑C++ language features; point it at `build/compile_commands.json`.
-	- C/C++ (`ms-vscode.cpptools`) — optional; works as an alternative language provider but may be less accurate for Obj‑C++ on macOS.
+Instead of smoothing away variability, the engine exposes it.
 
-- IntelliSense notes:
-	- Regenerate compile commands whenever CMake flags change:
-		`cmake -S . -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON`
-	- If using clangd, set the clangd path in workspace settings and use `--compile-commands-dir=build` so clangd reads the compilation database.
-	- If using cpptools, point `c_cpp_properties.json` at `${workspaceFolder}/build/compile_commands.json` and set `compilerPath` to `/usr/bin/clang++` on macOS.
+Timing, pacing, and presentation behavior are intended to be **measurable and inspectable**, rather than hidden behind heuristics. Telemetry is favored over illusion.
 
-## Version control and workflow
+---
 
-- The project uses a typical feature-branch workflow. Commit frequently and push to your remote to back up work.
-- Before destructive operations, create a backup branch:
+### 🔄 VRR-Friendly (But Not Dependent)
 
-```bash
-git branch backup/local-before-reset
-```
+Variable Refresh Rate (VRR) displays are embraced where available, as they:
+- reduce worst-case latency
+- eliminate fixed-refresh timing cliffs
+- allow smooth degradation under load
 
-## Contributing
+However:
+- VRR is never required
+- non-VRR displays are fully supported
+- engine behavior does not depend on display capabilities
 
-- Keep platform-specific code (macOS) inside `src/platform/macos` and keep renderer interface code platform-agnostic under `src/renderer`.
-- Add unit tests or small example scenes under `tests/` if you expand the project.
+Presentation timing is observed, not enforced.
 
-## License
+---
 
-Add a license file (e.g. `LICENSE`) and reference it here.
+## 🏗️ High-Level Architecture
+
+The engine is structured into three clearly separated layers:
+
+    +-----------------------------+
+    |        Engine Core          |
+    |  (simulation, timing, API)  |
+    +-----------------------------+
+    |     Renderer Abstraction    |
+    |  (backend-neutral interface)|
+    +-----------------------------+
+    |        Platform Layer       |
+    | (windowing, input, startup) |
+    +-----------------------------+
+
+- **Engine Core**  
+  Platform-agnostic logic governing simulation, timing, and frame orchestration.
+
+- **Renderer Abstraction**  
+  A narrow, explicit interface mapping engine intent to concrete graphics APIs.
+
+- **Platform Layer**  
+  OS-specific concerns such as windowing, input, and lifecycle management, isolated from core logic.
+
+---
+
+## 🎨 Renderer Backends
+
+Renderer backends implement the same engine-facing abstraction and are described symmetrically.
+
+### 🧱 Metal
+
+**Status:** Implemented
+
+- Maps engine-level rendering intent onto explicit GPU command submission.
+- Presentation behavior follows the engine’s latency-first, adaptive philosophy within platform constraints.
+- Resolution and drawable sizing are treated as dynamic.
+
+---
+
+### 🧩 DirectX 12
+
+**Status:** Stub
+
+- Intended to implement the same renderer abstraction using explicit command queues, resource binding, and pipeline state objects.
+- Serves as a validation target for renderer interface design.
+
+---
+
+### 🔺 Vulkan
+
+**Status:** Stub
+
+- Intended to implement the renderer abstraction using Vulkan’s explicit synchronization and pipeline model.
+- Acts as a cross-platform reference point for renderer architecture and shader portability.
+
+---
+
+## 🧩 Platform Layer
+
+The platform layer is responsible for:
+- window creation
+- input collection
+- lifecycle and startup coordination
+- handing off surfaces to the renderer abstraction
+
+Platform-specific behavior is explicitly isolated and does not leak into the engine core.
+
+---
+
+## 📍 Project Status & Direction
+
+This README describes **architectural intent and philosophy**.
+
+Concrete implementation details, progress, and next steps are tracked separately:
+
+- `STATUS.md` — current reality and direction
+- `AGENT.md` — strict rules and constraints for automated tooling
+
+---
+
+## ✨ Closing Thoughts
+
+This project is an exploration of what happens when:
+
+- latency is treated as a first-class design constraint
+- performance scales with available headroom
+- buffering is minimized instead of normalized
+- hardware is allowed to improve the experience over time
+
+It is not a framework, not a demo, and not a promise.
+
+It is an engine shaped by **explicit tradeoffs**, built to feel good today — and better tomorrow.
