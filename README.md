@@ -10,6 +10,18 @@ This README documents the project purpose, repository layout, how to build and r
 - Show how to integrate Objective‑C / Objective‑C++ (`.m` / `.mm`) sources into a cross-platform C++ project using CMake.
 - Offer a simple renderer backend abstraction so different renderer implementations (e.g. Metal) can be swapped or extended.
 
+## Latency-first rendering philosophy
+
+This project prioritizes lowest-possible input-to-photon latency over smoothness. The intended feel is “NES on a CRT”: immediate response with no artificial buffering or smoothing. Current and planned behaviors follow these rules:
+
+- **Minimal buffering:** default to one frame in flight; never add extra buffering to smooth timing.
+- **Late input + late submit:** sample input immediately before simulation; submit rendering as late as possible (no render-then-sleep).
+- **Separate clocks:** simulation, render, and presentation timing are tracked independently; simulation correctness is guaranteed while presentation timing is best-effort.
+- **macOS composited reality:** macOS presentation is composited (CAMetalLayer → compositor), so treat presentation as offscreen.
+- **VRR preferred, not required:** VRR is an optimization, never an assumption; do not rely on exclusive fullscreen semantics.
+- **No blocking compilation during gameplay:** shader/pipeline compilation must not block runtime; use precompile or async paths.
+- **Expose telemetry:** report variability and misses instead of hiding them behind buffering.
+
 ## Architecture
 
 The project is split into three cooperating layers:
@@ -83,7 +95,7 @@ In short: macOS/AppKit owns the event loop, the Objective‑C layer owns platfor
 ## Build (macOS)
 
 Prerequisites (macOS Metal app bundle):
-- Xcode (Command Line Tools) — required for the macOS Metal backend (app bundle, windowing, Metal compilation).
+- Xcode (Command Line Tools) — required only for the macOS Metal target (app bundle, windowing, Metal compilation).
 - CMake (>= 3.22)
 
 From the repository root:
