@@ -32,6 +32,7 @@
 - Favor **low-level control** and educational detail. The user enjoys understanding how rendering, timing loops, and GPU plumbing work; explain architecture choices and provide reasoning when suggesting alternatives.
 - Keep terminal outputs concise and avoid cluttering the user’s screen. They prefer summaries over raw command dumps and like code snippets to be clearly indented in explanations.
 - Multi-backend rendering (Metal now, DirectX/Vulkan later) is a core learning goal. Highlight how changes align with that roadmap and update `STATUS.md` when plans shift.
+- Keep `README.md` and `AGENTS.md` aligned with architecture, workflow, and policy changes.
 
 ## Session Handoff — 2025-11-09
 - Docs refreshed today: `README.md` now mentions `AGENTS.md`; `STATUS.md` snapshot updated with new highlights/next steps.

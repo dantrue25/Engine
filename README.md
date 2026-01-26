@@ -1,110 +1,48 @@
-# 🚀 Engine
+# Engine
 
-*A latency-first, adaptive real-time rendering engine focused on feel, predictability, and long-term scalability.*
+A latency-first real-time rendering engine with adaptive performance behavior.
 
----
+## Overview
 
-## 🎯 Overview
+Engine is an experimental renderer focused on input-to-photon latency, explicit timing control, and adaptive workload scaling based on runtime headroom. It does not assume a fixed resolution, frame rate, or performance tier. The goal is predictable responsiveness across a wide range of hardware.
 
-**Engine** is an experimental real-time rendering engine built around a simple but demanding goal:
+## Core Philosophy
 
-> **Make interactive systems feel good — immediately — on any machine.**
+### Latency First
 
-The engine prioritizes **input-to-photon latency**, explicit control over timing, and the ability to **adapt to the hardware it is running on**, rather than assuming a fixed resolution, frame rate, or performance tier.
+- Prefer reduced work over added latency when under load.
+- Avoid buffering to hide timing issues.
+- Use minimal frames in flight.
+- Sample input late and submit rendering late.
 
-Rather than targeting a specific class of machine, Engine is designed to **discover available headroom at runtime** and scale its workload accordingly — preserving responsiveness on constrained systems and automatically improving visual fidelity and frame rate on more capable ones.
+### Adaptive Performance
 
----
+- Variable frame rate.
+- Variable render resolution.
+- CPU/GPU timing telemetry guides scaling.
+- Content authored once should scale up on future hardware without changes.
 
-## ⚡ Core Philosophy
+### Independent Clocks
 
-### ⚡ Latency Is Paramount
+The engine separates:
 
-Responsiveness comes first.
+1. Simulation time (deterministic and controlled).
+2. Render time (variable based on workload).
+3. Presentation time (platform/display controlled).
 
-- Input-to-photon latency is prioritized over visual smoothness.
-- Buffering to hide timing issues is avoided.
-- When under load, the engine prefers **reducing work** over **adding latency**.
+### Observable Behavior
 
-Default stance:
-- minimal frames in flight
-- late input sampling
-- late rendering submission
+Timing and pacing are intended to be measurable and inspectable. The engine favors telemetry over hidden heuristics.
 
-Stalls are acceptable. Queued frames are not.
+### VRR Compatibility
 
----
+- VRR reduces worst-case latency and timing cliffs where available.
+- VRR is not required; non-VRR displays are supported.
+- Presentation timing is observed, not enforced.
 
-### 📈 Adaptive Performance & Graceful Scaling
+## Architecture
 
-Engine is built with the assumption that **hardware evolves faster than software**.
-
-Instead of locking content to the performance characteristics of the machine it was authored on, the engine is designed to **adapt continuously to the headroom available on the system**.
-
-This means:
-
-- **Variable frame rate**  
-  Rendering and presentation are not bound to a fixed cadence.
-
-- **Variable resolution**  
-  Render resolution is treated as a dynamic control variable, not a constant.
-
-- **Headroom-driven scaling**  
-  CPU and GPU timing are observed at runtime and used to adjust workload.
-
-- **Longevity by design**  
-  A game authored today should naturally render at higher resolution and frame rate on future hardware, without code or content changes.
-
-When performance pressure arises, the engine reduces workload rather than buffering frames — preserving responsiveness even as visual fidelity adapts.
-
-This adaptive behavior is **not a feature**; it is fundamental to the engine’s identity and inseparable from its latency-first design.
-
----
-
-### ⏱️ Three Independent Clocks
-
-The engine explicitly separates:
-
-1. **Simulation time**  
-   Deterministic, controlled, and decoupled from presentation.
-
-2. **Render time**  
-   Variable, driven by workload and available resources.
-
-3. **Presentation time**  
-   Controlled by the platform and display environment.
-
-Predictability comes from **separation**, not forced alignment.
-
----
-
-### 🧪 Observable, Not Magical
-
-Instead of smoothing away variability, the engine exposes it.
-
-Timing, pacing, and presentation behavior are intended to be **measurable and inspectable**, rather than hidden behind heuristics. Telemetry is favored over illusion.
-
----
-
-### 🔄 VRR-Friendly (But Not Dependent)
-
-Variable Refresh Rate (VRR) displays are embraced where available, as they:
-- reduce worst-case latency
-- eliminate fixed-refresh timing cliffs
-- allow smooth degradation under load
-
-However:
-- VRR is never required
-- non-VRR displays are fully supported
-- engine behavior does not depend on display capabilities
-
-Presentation timing is observed, not enforced.
-
----
-
-## 🏗️ High-Level Architecture
-
-The engine is structured into three clearly separated layers:
+Three layers:
 
     +-----------------------------+
     |        Engine Core          |
@@ -117,81 +55,141 @@ The engine is structured into three clearly separated layers:
     | (windowing, input, startup) |
     +-----------------------------+
 
-- **Engine Core**  
-  Platform-agnostic logic governing simulation, timing, and frame orchestration.
+- Engine Core: platform-agnostic logic for simulation, timing, and frame orchestration.
+- Renderer Abstraction: narrow interface mapping engine intent to graphics APIs.
+- Platform Layer: OS-specific windowing, input, and lifecycle concerns.
 
-- **Renderer Abstraction**  
-  A narrow, explicit interface mapping engine intent to concrete graphics APIs.
+## Design Decisions
 
-- **Platform Layer**  
-  OS-specific concerns such as windowing, input, and lifecycle management, isolated from core logic.
+- Presentation intent is abstracted via `src/platform/PlatformPresentation.h` so platform policy (windowed/borderless/exclusive) is expressed in a backend-neutral form.
+- macOS presentation is composited (CAMetalLayer -> compositor), so presentation timing is treated as observed behavior rather than something the engine controls (`src/platform/macos/MacOSPresentation.mm`).
+- Timing and pacing are designed to be measurable; telemetry is a first-class output of the runtime rather than a hidden implementation detail.
+- Presentation intent may not match presentation reality; the engine records intent and treats the display system as authoritative (`src/platform/macos/MacOSPresentation.mm`).
+- Exclusive fullscreen is treated as intent only; the engine does not assume exclusive scanout control (`src/platform/macos/MacOSPresentation.mm`).
+- Shader/pipeline compilation must not block gameplay; compilation should be prebuilt or async (`src/renderer/IRendererBackend.h`).
+- Input sampling and render submission are intended to be as late as possible to minimize end-to-end latency (`src/renderer/metal/Renderer.mm`).
 
----
+## Key Code Paths
 
-## 🎨 Renderer Backends
+### Engine core
 
-Renderer backends implement the same engine-facing abstraction and are described symmetrically.
+- `src/engine/EngineCore.h` defines the platform-agnostic loop entry points: `setRenderer` and `update`.
+- `EngineCore::update` (`src/engine/EngineCore.cpp`) is the single entry point that turns a delta time into a renderer call.
 
-### 🧱 Metal
+### Renderer contract
 
-**Status:** Implemented
+- `src/renderer/IRendererBackend.h` defines the backend API used by the engine: initialize, resize, render, GPU timing query, and resolution scale control.
+- `RendererInitInfo` carries the native view pointer (`MTKView*` on macOS) so the backend can configure API-specific state without polluting the engine.
 
-- Maps engine-level rendering intent onto explicit GPU command submission.
-- Presentation behavior follows the engine’s latency-first, adaptive philosophy within platform constraints.
-- Resolution and drawable sizing are treated as dynamic.
+### macOS bootstrap
 
----
+- `src/platform/macos/main.mm` creates the shared `NSApplication`, installs `AppDelegate`, and hands control to AppKit.
+- `src/platform/macos/AppDelegate.mm` builds the `NSWindow` and `MTKView`, wires the `Renderer` delegate, and installs the on-screen text overlay.
 
-### 🧩 DirectX 12
+### Metal renderer host and backend
 
-**Status:** Stub
+- Metal-specific callouts are listed under the macOS (Metal) platform section.
 
-- Intended to implement the same renderer abstraction using explicit command queues, resource binding, and pipeline state objects.
-- Serves as a validation target for renderer interface design.
+### Presentation intent adapter
 
----
+- `src/platform/PlatformPresentation.h` defines `PresentationMode` and `IPlatformPresentation` to keep presentation policy cross-platform.
+- `MacOSPresentation::setPresentationMode` (`src/platform/macos/MacOSPresentation.mm`) maps unsupported exclusive fullscreen to borderless to preserve intent without claiming OS control that macOS does not provide.
 
-### 🔺 Vulkan
+## Platforms
 
-**Status:** Stub
+### macOS (Metal)
 
-- Intended to implement the renderer abstraction using Vulkan’s explicit synchronization and pipeline model.
-- Acts as a cross-platform reference point for renderer architecture and shader portability.
+Backend
 
----
+- Maps engine intent to Metal command submission.
+- Presentation behavior follows latency-first policy within platform constraints.
+- Resolution/drawable sizing are dynamic.
 
-## 🧩 Platform Layer
+Points of interest
 
-The platform layer is responsible for:
-- window creation
-- input collection
-- lifecycle and startup coordination
-- handing off surfaces to the renderer abstraction
+- `src/renderer/metal/Renderer.mm` owns `EngineCore`, a `MetalRendererBackend`, and a CoreVideo display link.
+- `Renderer::handleDisplayLinkTick` computes a display-link delta, dispatches to the main queue, and requests a draw on the `MTKView`.
+- `Renderer::requestDrawWithDelta` sets `_pendingDeltaSeconds` and triggers `-[MTKView draw]` for manual frame submission.
+- `Renderer::drawInMTKView` reads `_pendingDeltaSeconds`, calls `EngineCore::update`, and updates the HUD text.
+- `_pendingDeltaSeconds` and `_fallbackDeltaSeconds` control the timing fallback when display-link data is missing.
+- `MetalRendererBackend::renderFrame` is the current GPU work path: drawable acquire, clear pass encode, present, commit.
+- `MetalRendererBackend::getSmoothedGpuFrameTimeMs` returns the smoothed GPU timing used by the HUD.
+- `_smoothedGpuFrameTimeMs` and `_gpuFrameSmoothing` control smoothing in the command buffer completion handler.
+- `MetalRendererBackend::setResolutionScale` clamps the scale and updates `MTKView.drawableSize`, providing a hook for dynamic resolution.
 
-Platform-specific behavior is explicitly isolated and does not leak into the engine core.
+Execution flow
 
----
+1. Bootstrap (Objective-C++)
+   - macOS launches `MetalEngine.app`, which calls `main` in `src/platform/macos/main.mm`.
+   - `main` creates the `NSApplication`, instantiates `AppDelegate`, and hands control to AppKit via `NSApplicationMain`.
 
-## 📍 Project Status & Direction
+2. Window and view setup
+   - `AppDelegate::applicationDidFinishLaunching` runs in `src/platform/macos/AppDelegate.mm`.
+   - It creates an `NSWindow` and an `MTKView` backed by the default `MTLDevice`.
+   - The view's delegate is set to the Objective-C++ `Renderer` in `src/renderer/metal`.
 
-This README describes **architectural intent and philosophy**.
+3. Renderer host and engine handshake
+   - `Renderer` constructs a `MetalRendererBackend` and passes `MTKView` via `RendererInitInfo`.
+   - `Renderer` constructs `EngineCore` and calls `setRenderer` with the backend instance.
 
-Concrete implementation details, progress, and next steps are tracked separately:
+4. Per-frame flow
+   - AppKit triggers `Renderer::drawInMTKView`.
+   - `Renderer` forwards delta time to `EngineCore::update`.
+   - `EngineCore` builds `RendererFrameInfo` and calls `IRendererBackend::renderFrame`.
 
-- `STATUS.md` — current reality and direction
-- `AGENT.md` — strict rules and constraints for automated tooling
+5. Metal backend work
+   - `MetalRendererBackend::renderFrame` requests a render pass descriptor and drawable from `MTKView`.
+   - If either is missing, the frame is skipped.
+   - Otherwise it encodes a clear pass, presents the drawable, and commits the command buffer.
 
----
+### Windows (DirectX 12, planned)
 
-## ✨ Closing Thoughts
+Backend
 
-This project is an exploration of what happens when:
+- Intended to mirror the renderer abstraction using explicit queues and pipeline state objects.
+- Serves as a validation target for the interface design.
+- The backend in `src/renderer/directx` is a stub and logs "not implemented."
 
-- latency is treated as a first-class design constraint
-- performance scales with available headroom
-- buffering is minimized instead of normalized
-- hardware is allowed to improve the experience over time
+Points of interest
 
-It is not a framework, not a demo, and not a promise.
+- Placeholder until the DirectX backend is implemented.
 
-It is an engine shaped by **explicit tradeoffs**, built to feel good today — and better tomorrow.
+Execution flow
+
+- Platform bootstrap will live under `src/platform/windows`.
+- Flow will mirror macOS: platform bootstrap -> engine tick -> backend render.
+
+### Windows/Linux (Vulkan, planned)
+
+Backend
+
+- Intended to mirror the renderer abstraction using explicit synchronization and pipelines.
+- Acts as a cross-platform reference for renderer architecture and shader portability.
+- The backend in `src/renderer/vulkan` is a stub and logs "not implemented."
+
+Points of interest
+
+- Placeholder until the Vulkan backend is implemented.
+
+Execution flow
+
+- Platform bootstrap will be per-target under `src/platform/<platform>`.
+- Flow will mirror the same engine-facing interface.
+
+## Platform Layer
+
+Responsibilities:
+
+- Window creation
+- Input collection
+- Lifecycle and startup coordination
+- Surface handoff to the renderer abstraction
+
+Platform-specific behavior is isolated from the engine core.
+
+## Project Status
+
+This file describes architecture and intent. Current progress and next steps:
+
+- `STATUS.md`
+- `AGENTS.md`
